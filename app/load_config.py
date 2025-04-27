@@ -1,23 +1,43 @@
 import yaml
+from threading import Lock
 
 
 class ConfigLoader:
     _instance = None
-    _config = None  # This should be an instance-level attribute
+    _lock = Lock()
+    _config = None
 
     def __new__(cls, config_path="config.yml"):
         if not cls._instance:
-            cls._instance = super(ConfigLoader, cls).__new__(cls)
-            cls._instance._load_config(config_path)
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super(ConfigLoader, cls).__new__(cls)
+                    cls._instance._load_config(config_path)
         return cls._instance
 
     def _load_config(self, config_path):
-        with open(config_path, "r") as file:
-            self._config = yaml.safe_load(file)  # Use self._config here
+        with open(config_path, "r") as f:
+            self._config = yaml.safe_load(f)
 
-    def get_config(self):
-        return self._config
+    def get(self, key, default=None):
+        """
+        Retrieve a value from the loaded config.
+
+        Args:
+            key (str): Dot-separated key to retrieve nested config values.
+            default (any): Default value if key not found.
+
+        Returns:
+            any: The config value.
+        """
+        keys = key.split(".")
+        value = self._config
+        for k in keys:
+            if isinstance(value, dict) and k in value:
+                value = value[k]
+            else:
+                return default
+        return value
 
 
-# Create a ConfigLoader instance that will be used across the app
 config = ConfigLoader()

@@ -1,150 +1,168 @@
-import logging
+from app.logger import logger
 from fastapi import HTTPException
+from pymongo.errors import PyMongoError
 from app.db import mongo_client
 
-
-logger = logging.getLogger(__name__)
+logger = logger.get_logger()
 
 
 class UserService:
     """
-    UserService class to handle operations related to users such as
-    inserting a new user, fetching balance, withdrawing, depositing, and deleting users.
+    Service class for user-related operations such as creating, fetching balance,
+    withdrawing, depositing, and deleting users.
     """
 
-    @staticmethod
-    async def insert_user(user_data: dict):
+    @classmethod
+    async def insert_user(cls, user_data: dict):
         """
-        Insert a new user into the database. If the user already exists, it raises an HTTPException.
+        Insert a new user into the database. If the user already exists, raise an HTTPException.
 
         Args:
-            user_data (dict): The data of the user to insert.
+            user_data (dict): Data for the user to insert.
 
         Raises:
-            HTTPException: If the user already exists, a 400 error is raised.
+            HTTPException: 400 if user already exists, 500 for server error.
         """
+        collection = mongo_client.get_users_collection()
         try:
-            # Check if user already exists
-            existing_user = await mongo_client.get_users_collection().find_one({"username": user_data["username"]})
+            existing_user = await collection.find_one({"username": user_data["username"]})
             if existing_user:
-                logger.warning(f"User with username {user_data['username']} already exists.")
+                logger.info(f"User '{user_data['username']}' already exists.")
                 raise HTTPException(status_code=400, detail="User already exists")
 
-            # Insert the new user into the collection
-            await mongo_client.get_users_collection().insert_one(user_data)
-            logger.info(f"User with username {user_data['username']} successfully created.")
+            await collection.insert_one(user_data)
+            logger.info(f"User '{user_data['username']}' successfully created.")
+        except PyMongoError as e:
+            logger.error(f"Database error inserting user '{user_data['username']}': {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         except Exception as e:
-            logger.error(f"Error inserting user {user_data['username']}: {e}")
+            logger.error(f"Unexpected error inserting user '{user_data['username']}': {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
-    @staticmethod
-    async def get_balance(username: str):
+    @classmethod
+    async def get_balance(cls, username: str) -> float:
         """
-        Get the balance of a user by username. If the user does not exist, it raises an HTTPException.
+        Get the balance of a user by username.
 
         Args:
-            username (str): The username of the user whose balance is being fetched.
+            username (str): Username to fetch balance for.
 
         Returns:
-            float: The balance of the user.
+            float: User's balance.
 
         Raises:
-            HTTPException: If the user is not found, a 404 error is raised.
+            HTTPException: 404 if user not found, 500 for server error.
         """
+        collection = mongo_client.get_users_collection()
         try:
-            user = await mongo_client.get_users_collection().find_one({"username": username})
+            user = await collection.find_one({"username": username})
             if not user:
-                logger.warning(f"User with username {username} not found.")
+                logger.info(f"User '{username}' not found.")
                 raise HTTPException(status_code=404, detail="User not found")
 
-            logger.info(f"Fetched balance for user {username}: {user['balance']}")
-            return user["balance"]
+            balance = user.get("balance", 0.0)
+            logger.info(f"Fetched balance for user '{username}': {balance}")
+            return balance
+        except PyMongoError as e:
+            logger.error(f"Database error fetching balance for '{username}': {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         except Exception as e:
-            logger.error(f"Error fetching balance for user {username}: {e}")
+            logger.error(f"Unexpected error fetching balance for '{username}': {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
-    @staticmethod
-    async def withdraw(username: str, amount: float):
+    @classmethod
+    async def withdraw(cls, username: str, amount: float) -> float:
         """
-        Withdraw an amount from the user's balance. If the user does not have sufficient funds or doesn't exist,
-        an HTTPException is raised.
+        Withdraw an amount from a user's balance.
 
         Args:
-            username (str): The username of the user withdrawing funds.
-            amount (float): The amount to withdraw.
+            username (str): Username withdrawing funds.
+            amount (float): Amount to withdraw.
 
         Returns:
-            float: The new balance after the withdrawal.
+            float: New balance after withdrawal.
 
         Raises:
-            HTTPException: If the user does not exist or has insufficient funds, appropriate error is raised.
+            HTTPException: 404 if user not found, 400 if insufficient funds, 500 for server error.
         """
+        collection = mongo_client.get_users_collection()
         try:
-            user = await mongo_client.get_users_collection().find_one({"username": username})
+            user = await collection.find_one({"username": username})
             if not user:
-                logger.warning(f"User with username {username} not found.")
+                logger.info(f"User '{username}' not found.")
                 raise HTTPException(status_code=404, detail="User not found")
-            if user["balance"] < amount:
-                logger.warning(f"User {username} has insufficient funds for withdrawal of {amount}.")
+
+            current_balance = user.get("balance", 0.0)
+            if current_balance < amount:
+                logger.info(f"User '{username}' has insufficient funds for withdrawal of {amount}.")
                 raise HTTPException(status_code=400, detail="Insufficient funds")
 
-            new_balance = user["balance"] - amount
-            await mongo_client.get_users_collection().update_one({"username": username},
-                                                                 {"$set": {"balance": new_balance}})
-            logger.info(f"Withdrew {amount} from user {username}, new balance: {new_balance}")
+            new_balance = current_balance - amount
+            await collection.update_one({"username": username}, {"$set": {"balance": new_balance}})
+            logger.info(f"Withdrew {amount} from user '{username}', new balance: {new_balance}")
             return new_balance
+        except PyMongoError as e:
+            logger.error(f"Database error withdrawing from '{username}': {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         except Exception as e:
-            logger.error(f"Error withdrawing {amount} from user {username}: {e}")
+            logger.error(f"Unexpected error withdrawing from '{username}': {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
-    @staticmethod
-    async def deposit(username: str, money: float):
+    @classmethod
+    async def deposit(cls, username: str, amount: float) -> float:
         """
-        Deposit an amount into the user's balance. If the user does not exist, an HTTPException is raised.
+        Deposit an amount into a user's balance.
 
         Args:
-            username (str): The username of the user depositing funds.
-            money (float): The amount to deposit.
+            username (str): Username depositing funds.
+            amount (float): Amount to deposit.
 
         Returns:
-            float: The new balance after the deposit.
+            float: New balance after deposit.
 
         Raises:
-            HTTPException: If the user does not exist, a 404 error is raised.
+            HTTPException: 404 if user not found, 500 for server error.
         """
+        collection = mongo_client.get_users_collection()
         try:
-            user = await mongo_client.get_users_collection().find_one({"username": username})
+            user = await collection.find_one({"username": username})
             if not user:
-                logger.warning(f"User with username {username} not found.")
+                logger.info(f"User '{username}' not found.")
                 raise HTTPException(status_code=404, detail="User not found")
 
-            new_balance = user["balance"] + money
-            await mongo_client.get_users_collection().update_one({"username": username},
-                                                                 {"$set": {"balance": new_balance}})
-            logger.info(f"Deposited {money} into user {username}'s account, new balance: {new_balance}")
+            new_balance = user.get("balance", 0.0) + amount
+            await collection.update_one({"username": username}, {"$set": {"balance": new_balance}})
+            logger.info(f"Deposited {amount} into user '{username}' account, new balance: {new_balance}")
             return new_balance
+        except PyMongoError as e:
+            logger.error(f"Database error depositing into '{username}': {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         except Exception as e:
-            logger.error(f"Error depositing {money} into user {username}: {e}")
+            logger.error(f"Unexpected error depositing into '{username}': {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
-    @staticmethod
-    async def delete_user(username: str):
+    @classmethod
+    async def delete_user(cls, username: str):
         """
-        Delete a user from the database. If the user does not exist, it raises an HTTPException.
+        Delete a user from the database.
 
         Args:
-            username (str): The username of the user to delete.
+            username (str): Username to delete.
 
         Raises:
-            HTTPException: If the user does not exist, a 404 error is raised.
+            HTTPException: 404 if user not found, 500 for server error.
         """
+        collection = mongo_client.get_users_collection()
         try:
-            result = await mongo_client.get_users_collection().delete_one({"username": username})
+            result = await collection.delete_one({"username": username})
             if result.deleted_count == 0:
-                logger.warning(f"Attempted to delete user {username}, but they do not exist.")
+                logger.info(f"Attempted to delete user '{username}', but user does not exist.")
                 raise HTTPException(status_code=404, detail="User not found")
 
-            logger.info(f"User {username} successfully deleted.")
+            logger.info(f"User '{username}' successfully deleted.")
+        except PyMongoError as e:
+            logger.error(f"Database error deleting user '{username}': {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         except Exception as e:
-            logger.error(f"Error deleting user {username}: {e}")
+            logger.error(f"Unexpected error deleting user '{username}': {e}")
             raise HTTPException(status_code=500, detail="Internal server error")

@@ -14,8 +14,7 @@ class Logger:
         return cls._instance
 
     def _initialize_logger(self):
-        configuration = config.get_config()
-        log_config = configuration.get("logging", {})
+        log_config = config.get("logging", {})
 
         log_level = log_config.get("level", "DEBUG").upper()
         log_format = log_config.get("format", '%(asctime)s - %(name)s - %(levelname)s - %(message)s')

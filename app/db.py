@@ -1,9 +1,9 @@
-import logging
+from app.logger import logger
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.load_config import config
 
 
-logger = logging.getLogger(__name__)
+logger = logger.get_logger()
 
 
 class MongoDBClient:
@@ -19,14 +19,29 @@ class MongoDBClient:
         - Retrieve the database and collections using configuration settings.
         """
         try:
-            # MongoDB connection setup using Motor AsyncIOMotorClient
-            self.client = AsyncIOMotorClient(config["mongodb"]["uri"])
-            self.db = self.client[config["mongodb"]["database"]]
-            self.users_collection = self.db[config["mongodb"]["users_collection"]]
+            logger.info("Attempting to load configuration for mongoDB...")
+            # Ensure config is properly loaded
+            self.config = config
 
-            # Log successful connection
-            logger.info(f"Successfully connected to MongoDB database: {config['mongodb']['database']}")
+            # Get the MongoDB URI and database from the config
+            mongodb_config = self.config.get("mongodb")
+            mongo_uri = mongodb_config.get("uri")
+            database_name = mongodb_config.get("database")
+            users_collection_name = mongodb_config.get("users_collection")
+
+            if not mongo_uri or not database_name or not users_collection_name:
+                raise ValueError("MongoDB configuration missing required fields: uri, database, or users_collection")
+            logger.info("MongoDB configuration loaded successfully.")
+
+            logger.info("Connection to Database...")
+            # MongoDB connection setup using Motor AsyncIOMotorClient
+            self.mongo_client = AsyncIOMotorClient(mongo_uri)
+            self.db = self.mongo_client[database_name]
+            self.users_collection = self.db[users_collection_name]
+            logger.info(f"Successfully connected to MongoDB database: {database_name}")
+
         except Exception as e:
+            # Log error if MongoDB connection fails
             logger.error(f"Error connecting to MongoDB: {e}")
             raise
 
@@ -43,4 +58,3 @@ class MongoDBClient:
 
 # Create an instance of the MongoDBClient
 mongo_client = MongoDBClient()
-
