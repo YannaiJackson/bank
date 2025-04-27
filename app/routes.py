@@ -8,7 +8,6 @@ router = APIRouter()
 security = HTTPBasic()
 
 
-# Dummy authentication function
 async def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     username = credentials.username
     password = credentials.password

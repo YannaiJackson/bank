@@ -1,12 +1,12 @@
 app:
-  host: "0.0.0.0"
-  port: 8000
+  host: "127.0.0.1"
+  port: 5000
 
 mongodb:
-  uri: "mongodb://localhost:27017"
-  database: "bank_db"
-  users_collection: "users"
+  url: "mongodb://localhost:27017"
+  database: "my_database"
 
 logging:
+  level: "DEBUG"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  level: "INFO"
+  file: "app.log"  # Optional: leave out if you only want console logging

@@ -1,19 +1,10 @@
 from fastapi import FastAPI
-from application.routes import router
+from app.routes import router
 from fastapi.middleware.cors import CORSMiddleware
-from application.load_config import config
-import logging
+from app.logger import logger
 
-
-# Logging setup
-logging.basicConfig(
-    format=config["logging"]["format"],
-    level=config["logging"]["level"],
-)
 
 application = FastAPI()
-
-# CORS
 application.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,3 +14,4 @@ application.add_middleware(
 )
 
 application.include_router(router)
+logger.get_logger().info("Application started...")
