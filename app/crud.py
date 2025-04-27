@@ -1,8 +1,6 @@
-# app/user_service.py
 import logging
 from fastapi import HTTPException
 from app.db import mongo_client
-from bson.objectid import ObjectId
 
 
 logger = logging.getLogger(__name__)
